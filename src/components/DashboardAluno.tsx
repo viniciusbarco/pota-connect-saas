@@ -1,13 +1,14 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, DollarSign, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Calendar, DollarSign, AlertTriangle, CheckCircle, MessageSquare } from 'lucide-react';
 import { mockFaturas } from '@/data/mockData';
 import { Fatura } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { NotificationPopup } from './NotificationPopup';
+import { generateWhatsAppLink, generateStudentPaymentMessage } from '@/utils/whatsappUtils';
+import { useToast } from '@/hooks/use-toast';
 
 interface Notification {
   id: string;
@@ -18,6 +19,7 @@ interface Notification {
 
 export const DashboardAluno: React.FC = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   
   const minhasFaturas = mockFaturas.filter(f => f.usuarioId === user?.id);
@@ -31,6 +33,26 @@ export const DashboardAluno: React.FC = () => {
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('pt-BR').format(new Date(date));
+  };
+
+  const enviarComprovanteWhatsApp = (fatura: Fatura) => {
+    const mensagem = generateStudentPaymentMessage(
+      'Professor', // Pode ser configurável futuramente
+      user?.nomeCompleto || 'Aluno',
+      fatura.valor,
+      fatura.dataVencimento
+    );
+    
+    // Número do professor (pode ser configurável futuramente)
+    const professorPhone = '5511999999999';
+    const whatsappUrl = generateWhatsAppLink(professorPhone, mensagem);
+    
+    window.open(whatsappUrl, '_blank');
+    
+    toast({
+      title: "WhatsApp Aberto",
+      description: "Mensagem preparada para envio do comprovante",
+    });
   };
 
   const getStatusColor = (fatura: Fatura) => {
@@ -201,9 +223,19 @@ export const DashboardAluno: React.FC = () => {
                     {getDiasParaVencimento(fatura.dataVencimento)}
                   </p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500 mb-2">PIX para pagamento:</p>
-                  <code className="text-xs bg-gray-100 p-2 rounded">professor@pota.com</code>
+                <div className="flex flex-col gap-2">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-2">PIX para pagamento:</p>
+                    <code className="text-xs bg-gray-100 p-2 rounded">professor@pota.com</code>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => enviarComprovanteWhatsApp(fatura)}
+                    className="bg-green-600 hover:bg-green-700 mt-2"
+                  >
+                    <MessageSquare className="w-4 h-4 mr-1" />
+                    Enviar Comprovante
+                  </Button>
                 </div>
               </div>
             ))}
@@ -244,9 +276,21 @@ export const DashboardAluno: React.FC = () => {
                   <p className="text-sm text-gray-600">Vencimento: {formatDate(fatura.dataVencimento)}</p>
                   <p className="text-sm font-medium">{formatCurrency(fatura.valor)}</p>
                 </div>
-                {fatura.status === 'Pago' && (
-                  <CheckCircle className="w-5 h-5 text-green-500" />
-                )}
+                <div className="flex items-center gap-2">
+                  {fatura.status === 'Pago' && (
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                  )}
+                  {fatura.status !== 'Pago' && (
+                    <Button
+                      size="sm"
+                      onClick={() => enviarComprovanteWhatsApp(fatura)}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <MessageSquare className="w-4 h-4 mr-1" />
+                      Enviar Comprovante
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -260,7 +304,7 @@ export const DashboardAluno: React.FC = () => {
           title={notification.title}
           message={notification.message}
           type={notification.type}
-          onClose={() => removeNotification(notification.id)}
+          onClose={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
         />
       ))}
     </div>

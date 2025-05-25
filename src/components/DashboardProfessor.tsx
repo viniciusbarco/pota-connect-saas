@@ -3,13 +3,17 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Phone, Calendar, DollarSign, AlertTriangle } from 'lucide-react';
+import { MessageSquare, Phone, Calendar, DollarSign, AlertTriangle, Filter } from 'lucide-react';
 import { mockFaturas } from '@/data/mockData';
 import { Fatura } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { generateWhatsAppLink, generateProfessorReminderMessage } from '@/utils/whatsappUtils';
+
+type FilterType = 'todas' | 'vencendo3dias' | 'venceHoje' | 'atrasadas';
 
 export const DashboardProfessor: React.FC = () => {
   const [faturas, setFaturas] = useState<Fatura[]>(mockFaturas);
+  const [filtroAtivo, setFiltroAtivo] = useState<FilterType>('todas');
   const { toast } = useToast();
 
   const formatPhone = (phone: string) => {
@@ -27,12 +31,20 @@ export const DashboardProfessor: React.FC = () => {
     return new Intl.DateTimeFormat('pt-BR').format(new Date(date));
   };
 
-  const isVencendoEm7Dias = (dataVencimento: Date) => {
+  const isVencendoEm3Dias = (dataVencimento: Date) => {
     const hoje = new Date();
     const vencimento = new Date(dataVencimento);
     const diffTime = vencimento.getTime() - hoje.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays <= 7 && diffDays >= 0;
+    return diffDays <= 3 && diffDays > 0;
+  };
+
+  const isVenceHoje = (dataVencimento: Date) => {
+    const hoje = new Date();
+    const vencimento = new Date(dataVencimento);
+    const diffTime = vencimento.getTime() - hoje.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays === 0;
   };
 
   const isAtrasado = (dataVencimento: Date) => {
@@ -42,14 +54,15 @@ export const DashboardProfessor: React.FC = () => {
   };
 
   const enviarLembreteWhatsApp = (fatura: Fatura) => {
-    const textoMensagem = encodeURIComponent(
-      `Olá ${fatura.usuario.nomeCompleto}, tudo bem? Sua mensalidade de ${formatCurrency(fatura.valor)} vence em ${formatDate(fatura.dataVencimento)}. Me manda o comprovante por aqui, por favor. Obrigado!\n\nPIX: professor@pota.com`
+    const mensagem = generateProfessorReminderMessage(
+      fatura.usuario.nomeCompleto,
+      fatura.valor,
+      fatura.dataVencimento
     );
     
-    const numeroLimpo = fatura.usuario.telefoneWhatsApp.replace(/\D/g, '');
-    const urlWhatsApp = `https://wa.me/${numeroLimpo}?text=${textoMensagem}`;
+    const whatsappUrl = generateWhatsAppLink(fatura.usuario.telefoneWhatsApp, mensagem);
     
-    window.open(urlWhatsApp, '_blank');
+    window.open(whatsappUrl, '_blank');
     
     toast({
       title: "WhatsApp Aberto",
@@ -72,9 +85,27 @@ export const DashboardProfessor: React.FC = () => {
     });
   };
 
+  const getFaturasFiltradas = () => {
+    const faturasPendentes = faturas.filter(f => f.status === 'Pendente');
+    
+    switch (filtroAtivo) {
+      case 'vencendo3dias':
+        return faturasPendentes.filter(f => isVencendoEm3Dias(f.dataVencimento));
+      case 'venceHoje':
+        return faturasPendentes.filter(f => isVenceHoje(f.dataVencimento));
+      case 'atrasadas':
+        return faturas.filter(f => isAtrasado(f.dataVencimento) && f.status !== 'Pago');
+      default:
+        return faturas;
+    }
+  };
+
   const faturasPendentes = faturas.filter(f => f.status === 'Pendente');
   const faturasAtrasadas = faturas.filter(f => isAtrasado(f.dataVencimento) && f.status !== 'Pago');
-  const faturasVencendo = faturas.filter(f => isVencendoEm7Dias(f.dataVencimento) && f.status === 'Pendente');
+  const faturasVencendo3Dias = faturasPendentes.filter(f => isVencendoEm3Dias(f.dataVencimento));
+  const faturasVenceHoje = faturasPendentes.filter(f => isVenceHoje(f.dataVencimento));
+
+  const faturasFiltradas = getFaturasFiltradas();
 
   return (
     <div className="space-y-6">
@@ -83,7 +114,7 @@ export const DashboardProfessor: React.FC = () => {
       </div>
 
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Faturas Pendentes</CardTitle>
@@ -99,168 +130,161 @@ export const DashboardProfessor: React.FC = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vencendo em 7 dias</CardTitle>
+            <CardTitle className="text-sm font-medium">Vencendo em 3 dias</CardTitle>
             <Calendar className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{faturasVencendo.length}</div>
+            <div className="text-2xl font-bold text-orange-600">{faturasVencendo3Dias.length}</div>
             <p className="text-xs text-muted-foreground">Requer atenção</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Faturas Atrasadas</CardTitle>
+            <CardTitle className="text-sm font-medium">Vence Hoje</CardTitle>
+            <Calendar className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{faturasVenceHoje.length}</div>
+            <p className="text-xs text-muted-foreground">Urgente</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Atrasadas</CardTitle>
             <AlertTriangle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{faturasAtrasadas.length}</div>
-            <p className="text-xs text-muted-foreground">Ação urgente necessária</p>
+            <p className="text-xs text-muted-foreground">Ação necessária</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Faturas Atrasadas */}
-      {faturasAtrasadas.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="w-5 h-5" />
-              Faturas Atrasadas
-            </CardTitle>
-            <CardDescription>Faturas que já passaram do vencimento</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {faturasAtrasadas.map((fatura) => (
-                <div key={fatura.id} className="flex items-center justify-between p-4 border border-red-200 rounded-lg bg-red-50">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-medium">{fatura.usuario.nomeCompleto}</h3>
-                      <Badge variant="destructive">Atrasado</Badge>
-                    </div>
-                    <p className="text-sm text-gray-600">Vencimento: {formatDate(fatura.dataVencimento)}</p>
-                    <p className="text-sm font-medium">{formatCurrency(fatura.valor)}</p>
-                    <p className="text-xs text-gray-500">{formatPhone(fatura.usuario.telefoneWhatsApp)}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => enviarLembreteWhatsApp(fatura)}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <Phone className="w-4 h-4 mr-1" />
-                      Lembrar pelo Zap
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => marcarComoPago(fatura.id)}
-                    >
-                      Marcar como Pago
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Faturas Vencendo em 7 dias */}
-      {faturasVencendo.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-orange-600">
-              <Calendar className="w-5 h-5" />
-              Vencendo nos Próximos 7 Dias
-            </CardTitle>
-            <CardDescription>Faturas que precisam de atenção</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {faturasVencendo.map((fatura) => (
-                <div key={fatura.id} className="flex items-center justify-between p-4 border border-orange-200 rounded-lg bg-orange-50">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-medium">{fatura.usuario.nomeCompleto}</h3>
-                      <Badge variant="secondary" className="bg-orange-100 text-orange-800">Vencendo</Badge>
-                    </div>
-                    <p className="text-sm text-gray-600">Vencimento: {formatDate(fatura.dataVencimento)}</p>
-                    <p className="text-sm font-medium">{formatCurrency(fatura.valor)}</p>
-                    <p className="text-xs text-gray-500">{formatPhone(fatura.usuario.telefoneWhatsApp)}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => enviarLembreteWhatsApp(fatura)}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <Phone className="w-4 h-4 mr-1" />
-                      Lembrar pelo Zap
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => marcarComoPago(fatura.id)}
-                    >
-                      Marcar como Pago
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Todas as Faturas */}
+      {/* Filtros */}
       <Card>
         <CardHeader>
-          <CardTitle>Todas as Faturas</CardTitle>
-          <CardDescription>Histórico completo de faturas</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            Filtros Rápidos
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={filtroAtivo === 'todas' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroAtivo('todas')}
+            >
+              Todas ({faturas.length})
+            </Button>
+            <Button
+              variant={filtroAtivo === 'vencendo3dias' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroAtivo('vencendo3dias')}
+              className={filtroAtivo === 'vencendo3dias' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+            >
+              Vencendo em 3 dias ({faturasVencendo3Dias.length})
+            </Button>
+            <Button
+              variant={filtroAtivo === 'venceHoje' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroAtivo('venceHoje')}
+              className={filtroAtivo === 'venceHoje' ? 'bg-red-600 hover:bg-red-700' : ''}
+            >
+              Vence hoje ({faturasVenceHoje.length})
+            </Button>
+            <Button
+              variant={filtroAtivo === 'atrasadas' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroAtivo('atrasadas')}
+              className={filtroAtivo === 'atrasadas' ? 'bg-red-700 hover:bg-red-800' : ''}
+            >
+              Atrasadas ({faturasAtrasadas.length})
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lista de Faturas Filtradas */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {filtroAtivo === 'todas' && 'Todas as Faturas'}
+            {filtroAtivo === 'vencendo3dias' && 'Faturas Vencendo em 3 Dias'}
+            {filtroAtivo === 'venceHoje' && 'Faturas que Vencem Hoje'}
+            {filtroAtivo === 'atrasadas' && 'Faturas Atrasadas'}
+          </CardTitle>
+          <CardDescription>
+            {faturasFiltradas.length} fatura(s) encontrada(s)
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {faturas.map((fatura) => (
-              <div key={fatura.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-medium">{fatura.usuario.nomeCompleto}</h3>
-                    <Badge 
-                      variant={
-                        fatura.status === 'Pago' ? 'secondary' : 
-                        fatura.status === 'Atrasado' ? 'destructive' : 
-                        'outline'
-                      }
-                    >
-                      {fatura.status}
-                    </Badge>
+            {faturasFiltradas.map((fatura) => {
+              const isAtrasada = isAtrasado(fatura.dataVencimento);
+              const venceHoje = isVenceHoje(fatura.dataVencimento);
+              const vencendo3Dias = isVencendoEm3Dias(fatura.dataVencimento);
+              
+              let cardClass = 'border';
+              if (isAtrasada && fatura.status !== 'Pago') cardClass += ' border-red-200 bg-red-50';
+              else if (venceHoje && fatura.status === 'Pendente') cardClass += ' border-red-200 bg-red-50';
+              else if (vencendo3Dias && fatura.status === 'Pendente') cardClass += ' border-orange-200 bg-orange-50';
+
+              return (
+                <div key={fatura.id} className={`flex items-center justify-between p-4 rounded-lg ${cardClass}`}>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-medium">{fatura.usuario.nomeCompleto}</h3>
+                      <Badge 
+                        variant={
+                          fatura.status === 'Pago' ? 'secondary' : 
+                          isAtrasada && fatura.status !== 'Pago' ? 'destructive' : 
+                          'outline'
+                        }
+                      >
+                        {fatura.status}
+                      </Badge>
+                      {venceHoje && fatura.status === 'Pendente' && (
+                        <Badge variant="destructive">Vence Hoje!</Badge>
+                      )}
+                      {vencendo3Dias && fatura.status === 'Pendente' && (
+                        <Badge className="bg-orange-100 text-orange-800">Vencendo</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600">Vencimento: {formatDate(fatura.dataVencimento)}</p>
+                    <p className="text-sm font-medium">{formatCurrency(fatura.valor)}</p>
+                    <p className="text-xs text-gray-500">{formatPhone(fatura.usuario.telefoneWhatsApp)}</p>
                   </div>
-                  <p className="text-sm text-gray-600">Vencimento: {formatDate(fatura.dataVencimento)}</p>
-                  <p className="text-sm font-medium">{formatCurrency(fatura.valor)}</p>
+                  {fatura.status !== 'Pago' && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => enviarLembreteWhatsApp(fatura)}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Phone className="w-4 h-4 mr-1" />
+                        Zap
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => marcarComoPago(fatura.id)}
+                      >
+                        Marcar Pago
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                {fatura.status !== 'Pago' && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => enviarLembreteWhatsApp(fatura)}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <Phone className="w-4 h-4 mr-1" />
-                      Zap
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => marcarComoPago(fatura.id)}
-                    >
-                      Marcar Pago
-                    </Button>
-                  </div>
-                )}
+              );
+            })}
+            
+            {faturasFiltradas.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <p>Nenhuma fatura encontrada para o filtro selecionado.</p>
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>
