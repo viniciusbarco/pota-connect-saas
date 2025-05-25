@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, DollarSign, AlertTriangle, CheckCircle, MessageSquare } from 'lucide-react';
-import { mockFaturas } from '@/data/mockData';
-import { Fatura } from '@/types';
+import { Calendar, DollarSign, AlertTriangle, CheckCircle, MessageSquare, Bell } from 'lucide-react';
+import { mockFaturas, mockPosts } from '@/data/mockData';
+import { Fatura, Post } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { NotificationPopup } from './NotificationPopup';
 import { generateWhatsAppLink, generateStudentPaymentMessage } from '@/utils/whatsappUtils';
@@ -21,6 +21,8 @@ export const DashboardAluno: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [novasMensagens, setNovasMensagens] = useState<Post[]>([]);
+  const [mensagensLidas, setMensagensLidas] = useState<string[]>([]);
   
   const minhasFaturas = mockFaturas.filter(f => f.usuarioId === user?.id);
 
@@ -35,15 +37,24 @@ export const DashboardAluno: React.FC = () => {
     return new Intl.DateTimeFormat('pt-BR').format(new Date(date));
   };
 
+  const formatDateTime = (date: Date) => {
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(date));
+  };
+
   const enviarComprovanteWhatsApp = (fatura: Fatura) => {
     const mensagem = generateStudentPaymentMessage(
-      'Professor', // Pode ser configurável futuramente
+      'Professor',
       user?.nomeCompleto || 'Aluno',
       fatura.valor,
       fatura.dataVencimento
     );
     
-    // Número do professor (pode ser configurável futuramente)
     const professorPhone = '5511999999999';
     const whatsappUrl = generateWhatsAppLink(professorPhone, mensagem);
     
@@ -53,6 +64,10 @@ export const DashboardAluno: React.FC = () => {
       title: "WhatsApp Aberto",
       description: "Mensagem preparada para envio do comprovante",
     });
+  };
+
+  const marcarMensagemComoLida = (postId: string) => {
+    setMensagensLidas(prev => [...prev, postId]);
   };
 
   const getStatusColor = (fatura: Fatura) => {
@@ -81,6 +96,26 @@ export const DashboardAluno: React.FC = () => {
   };
 
   useEffect(() => {
+    // Verificar mensagens novas do professor
+    const mensagensProfessor = mockPosts.filter(post => 
+      post.autor.tipoUsuario === 'Professor' && 
+      !mensagensLidas.includes(post.id)
+    );
+    
+    if (mensagensProfessor.length > 0) {
+      setNovasMensagens(mensagensProfessor);
+      
+      // Criar notificação de mensagem nova
+      const notification: Notification = {
+        id: `msg-${Date.now()}`,
+        title: 'Novas Mensagens!',
+        message: `Você tem ${mensagensProfessor.length} nova(s) mensagem(ns) do professor`,
+        type: 'info'
+      };
+      
+      setNotifications(prev => [notification, ...prev]);
+    }
+
     // Simular notificações automáticas
     const checkNotifications = () => {
       const hoje = new Date();
@@ -131,7 +166,7 @@ export const DashboardAluno: React.FC = () => {
 
     const timer = setTimeout(checkNotifications, 2000);
     return () => clearTimeout(timer);
-  }, [minhasFaturas]);
+  }, [minhasFaturas, mensagensLidas]);
 
   const removeNotification = (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
@@ -148,7 +183,54 @@ export const DashboardAluno: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Meu Dashboard</h1>
+        {novasMensagens.length > 0 && (
+          <Badge variant="destructive" className="animate-pulse">
+            <Bell className="w-3 h-3 mr-1" />
+            {novasMensagens.length} nova(s) mensagem(ns)
+          </Badge>
+        )}
       </div>
+
+      {/* Novas Mensagens do Professor */}
+      {novasMensagens.length > 0 && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-800">
+              <MessageSquare className="w-5 h-5" />
+              Novas Mensagens do Professor
+            </CardTitle>
+            <CardDescription>
+              Você tem {novasMensagens.length} mensagem(ns) nova(s)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {novasMensagens.slice(0, 3).map((mensagem) => (
+                <div key={mensagem.id} className="bg-white p-3 rounded border">
+                  <div className="flex justify-between items-start mb-2">
+                    <h4 className="font-medium">{mensagem.autor.nomeCompleto}</h4>
+                    <span className="text-xs text-gray-500">{formatDateTime(mensagem.dataPublicacao)}</span>
+                  </div>
+                  <p className="text-sm text-gray-700 line-clamp-2">{mensagem.mensagem}</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => marcarMensagemComoLida(mensagem.id)}
+                    className="mt-2"
+                  >
+                    Marcar como lida
+                  </Button>
+                </div>
+              ))}
+              {novasMensagens.length > 3 && (
+                <p className="text-sm text-gray-600 text-center">
+                  E mais {novasMensagens.length - 3} mensagem(ns)...
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Cards de Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -298,13 +380,13 @@ export const DashboardAluno: React.FC = () => {
       </Card>
 
       {/* Notificações Pop-up */}
-      {notifications.map((notification, index) => (
+      {notifications.map((notification) => (
         <NotificationPopup
           key={notification.id}
           title={notification.title}
           message={notification.message}
           type={notification.type}
-          onClose={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+          onClose={() => removeNotification(notification.id)}
         />
       ))}
     </div>

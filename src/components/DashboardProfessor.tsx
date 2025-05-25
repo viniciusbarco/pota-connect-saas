@@ -1,20 +1,22 @@
-
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Phone, Calendar, DollarSign, AlertTriangle, Filter } from 'lucide-react';
+import { MessageSquare, Phone, Calendar, DollarSign, AlertTriangle, Filter, UserPlus } from 'lucide-react';
 import { mockFaturas } from '@/data/mockData';
 import { Fatura } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { generateWhatsAppLink, generateProfessorReminderMessage } from '@/utils/whatsappUtils';
+import { CadastroAluno } from './CadastroAluno';
+import { ConfiguracaoPlanos } from './ConfiguracaoPlanos';
 
 type FilterType = 'todas' | 'vencendo3dias' | 'venceHoje' | 'atrasadas';
+type ViewType = 'dashboard' | 'cadastro' | 'configuracao';
 
 export const DashboardProfessor: React.FC = () => {
   const [faturas, setFaturas] = useState<Fatura[]>(mockFaturas);
   const [filtroAtivo, setFiltroAtivo] = useState<FilterType>('todas');
+  const [viewAtiva, setViewAtiva] = useState<ViewType>('dashboard');
   const { toast } = useToast();
 
   const formatPhone = (phone: string) => {
@@ -108,10 +110,33 @@ export const DashboardProfessor: React.FC = () => {
 
   const faturasFiltradas = getFaturasFiltradas();
 
+  if (viewAtiva === 'cadastro') {
+    return <CadastroAluno onVoltar={() => setViewAtiva('dashboard')} />;
+  }
+
+  if (viewAtiva === 'configuracao') {
+    return <ConfiguracaoPlanos onVoltar={() => setViewAtiva('dashboard')} />;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard do Professor</h1>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setViewAtiva('cadastro')}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <UserPlus className="w-4 h-4 mr-2" />
+            Cadastrar Aluno
+          </Button>
+          <Button
+            onClick={() => setViewAtiva('configuracao')}
+            variant="outline"
+          >
+            Configurar Planos
+          </Button>
+        </div>
       </div>
 
       {/* Cards de Resumo */}
@@ -292,4 +317,3 @@ export const DashboardProfessor: React.FC = () => {
     </div>
   );
 };
-
