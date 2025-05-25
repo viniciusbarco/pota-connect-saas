@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -93,7 +94,7 @@ export const DashboardProfessor: React.FC = () => {
       case 'venceHoje':
         return faturasPendentes.filter(f => isVenceHoje(f.dataVencimento));
       case 'atrasadas':
-        return faturas.filter(f => isAtrasado(f.dataVencimento) && f.status !== 'Pago');
+        return faturas.filter(f => isAtrasado(f.dataVencimento) && f.status === 'Pendente');
       default:
         return faturas;
     }
