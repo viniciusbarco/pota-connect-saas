@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -94,14 +95,14 @@ export const DashboardProfessor: React.FC = () => {
       case 'venceHoje':
         return faturasPendentes.filter(f => isVenceHoje(f.dataVencimento));
       case 'atrasadas':
-        return faturas.filter(f => isAtrasado(f.dataVencimento) && f.status === 'Pendente');
+        return faturasPendentes.filter(f => isAtrasado(f.dataVencimento));
       default:
         return faturas;
     }
   };
 
   const faturasPendentes = faturas.filter(f => f.status === 'Pendente');
-  const faturasAtrasadas = faturas.filter(f => isAtrasado(f.dataVencimento) && f.status !== 'Pago');
+  const faturasAtrasadas = faturas.filter(f => isAtrasado(f.dataVencimento) && f.status === 'Pendente');
   const faturasVencendo3Dias = faturasPendentes.filter(f => isVencendoEm3Dias(f.dataVencimento));
   const faturasVenceHoje = faturasPendentes.filter(f => isVenceHoje(f.dataVencimento));
 
@@ -291,3 +292,4 @@ export const DashboardProfessor: React.FC = () => {
     </div>
   );
 };
+
